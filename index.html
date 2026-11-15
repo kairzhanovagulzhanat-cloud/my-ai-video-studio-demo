@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -48,10 +47,37 @@ input,select,textarea{
 textarea{min-height:90px;resize:vertical}
 input[type=file]{display:none}
 .upload{display:inline-block}
-video{width:100%;max-height:420px;margin-top:15px;border-radius:9px}
+video{width:100%;max-height:420px;margin-top:15px;border-radius:9px;background:#000}
 .small{font-size:12px;color:#999}
 .result{background:#242424;padding:16px;border-radius:9px}
 footer{text-align:center;padding:30px;color:#777;font-size:12px}
+
+/* Multi-clip additions */
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.ghost{
+ background:#292929;color:#f5f0e8;border:1px solid #444
+}
+.clips{list-style:none;margin:15px 0 0;padding:0;display:grid;gap:10px}
+.clip{
+ display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+ background:#252525;border:1px solid #444;border-radius:9px;padding:12px
+}
+.clip.active{border-color:#c9a879;background:#30291f}
+.clip-info{flex:1 1 180px;min-width:0}
+.clip-name{
+ color:#f5f0e8;font-size:14px;
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.clip-meta{font-size:12px;color:#999;margin-top:3px}
+.clip-actions{display:flex;gap:6px;flex-wrap:wrap}
+.mini{
+ padding:10px 12px;min-width:44px;min-height:44px;font-size:14px;
+ background:#292929;color:#f5f0e8;border:1px solid #444
+}
+.mini:disabled{opacity:.35;cursor:default}
+.mini.danger{color:#e49a9a}
+.nowplaying{margin-top:12px}
+
 @media(max-width:600px){
  h1{font-size:29px}
  header{padding:17px}
@@ -73,10 +99,16 @@ footer{text-align:center;padding:30px;color:#777;font-size:12px}
 
  <section class="card">
   <h2>01 — Upload your footage</h2>
-  <label class="upload" for="videoFile">Choose video</label>
-  <input id="videoFile" type="file" accept="video/*">
-  <p id="fileInfo" class="small">No video selected.</p>
-  <video id="preview" controls hidden></video>
+  <div class="actions">
+   <label class="upload" for="videoFile" id="uploadLabel">Choose videos</label>
+   <button type="button" id="playAll" class="ghost" hidden>Play all in order</button>
+   <button type="button" id="clearAll" class="ghost" hidden>Remove all</button>
+  </div>
+  <input id="videoFile" type="file" accept="video/*" multiple>
+  <p id="fileInfo" class="small">No video selected. You can choose several clips at once, or add more later.</p>
+  <ul id="clipList" class="clips"></ul>
+  <p id="nowPlaying" class="small nowplaying" hidden></p>
+  <video id="preview" controls playsinline hidden></video>
  </section>
 
  <section class="card">
@@ -141,21 +173,236 @@ document.querySelectorAll("[data-style]").forEach(button=>{
  });
 });
 
+/* ---------- Multi-clip upload ---------- */
 const videoFile=document.getElementById("videoFile");
 const preview=document.getElementById("preview");
-let currentUrl=null;
+const clipList=document.getElementById("clipList");
+const fileInfo=document.getElementById("fileInfo");
+const nowPlaying=document.getElementById("nowPlaying");
+const playAllBtn=document.getElementById("playAll");
+const clearAllBtn=document.getElementById("clearAll");
+const uploadLabel=document.getElementById("uploadLabel");
+
+const clips=[];          // {id,name,size,url,duration}
+let selectedId=null;
+let nextId=1;
+let playingAll=false;
+
+function fmtTime(sec){
+ if(typeof sec!=="number"||!isFinite(sec)||sec<0)return "--:--";
+ const t=Math.round(sec);
+ return Math.floor(t/60)+":"+String(t%60).padStart(2,"0");
+}
+
+function indexOfClip(id){
+ return clips.findIndex(c=>c.id===id);
+}
+
+function readDuration(clip){
+ const probe=document.createElement("video");
+ probe.preload="metadata";
+ probe.muted=true;
+ probe.playsInline=true;
+ probe.setAttribute("playsinline","");
+ const finish=value=>{
+  clip.duration=value;
+  probe.removeAttribute("src");
+  probe.load();
+  render();
+ };
+ probe.onloadedmetadata=()=>finish(probe.duration);
+ probe.onerror=()=>finish(null);
+ probe.src=clip.url;
+}
+
+function addFiles(fileList){
+ const files=Array.from(fileList||[]);
+ let added=0;
+ files.forEach(file=>{
+  // iOS may report an empty type for some videos, so only skip clear non-videos
+  if(file.type&&!file.type.startsWith("video/"))return;
+  const clip={
+   id:nextId++,
+   name:file.name,
+   size:file.size,
+   url:URL.createObjectURL(file),
+   duration:null
+  };
+  clips.push(clip);
+  readDuration(clip);
+  added++;
+ });
+ if(added&&selectedId===null&&clips.length){
+  selectClip(clips[0].id,false);
+ }else{
+  render();
+ }
+}
+
+function selectClip(id,autoplay){
+ const clip=clips[indexOfClip(id)];
+ if(!clip)return;
+ selectedId=id;
+ preview.src=clip.url;
+ preview.hidden=false;
+ preview.load();
+ if(autoplay){
+  const p=preview.play();
+  if(p&&p.catch)p.catch(()=>{});
+ }
+ render();
+}
+
+function moveClip(id,dir){
+ const i=indexOfClip(id);
+ const j=i+dir;
+ if(i<0||j<0||j>=clips.length)return;
+ const tmp=clips[i];
+ clips[i]=clips[j];
+ clips[j]=tmp;
+ render();
+}
+
+function removeClip(id){
+ const i=indexOfClip(id);
+ if(i<0)return;
+ URL.revokeObjectURL(clips[i].url);
+ clips.splice(i,1);
+ if(selectedId===id){
+  playingAll=false;
+  if(clips.length){
+   selectClip(clips[Math.min(i,clips.length-1)].id,false);
+   return;
+  }
+  selectedId=null;
+  preview.pause();
+  preview.removeAttribute("src");
+  preview.load();
+  preview.hidden=true;
+ }
+ render();
+}
+
+function clearAll(){
+ clips.forEach(c=>URL.revokeObjectURL(c.url));
+ clips.length=0;
+ selectedId=null;
+ playingAll=false;
+ preview.pause();
+ preview.removeAttribute("src");
+ preview.load();
+ preview.hidden=true;
+ render();
+}
+
+function makeButton(label,title,onClick,disabled,extraClass){
+ const b=document.createElement("button");
+ b.type="button";
+ b.className="mini"+(extraClass?" "+extraClass:"");
+ b.textContent=label;
+ b.title=title;
+ b.setAttribute("aria-label",title);
+ b.disabled=!!disabled;
+ b.addEventListener("click",onClick);
+ return b;
+}
+
+function totalDuration(){
+ let total=0,known=true;
+ clips.forEach(c=>{
+  if(typeof c.duration==="number"&&isFinite(c.duration))total+=c.duration;
+  else known=false;
+ });
+ return known?total:null;
+}
+
+function render(){
+ clipList.innerHTML="";
+ clips.forEach((clip,i)=>{
+  const li=document.createElement("li");
+  li.className="clip"+(clip.id===selectedId?" active":"");
+
+  const info=document.createElement("div");
+  info.className="clip-info";
+  const name=document.createElement("div");
+  name.className="clip-name";
+  name.textContent=(i+1)+". "+clip.name;
+  const meta=document.createElement("div");
+  meta.className="clip-meta";
+  meta.textContent=fmtTime(clip.duration)+" · "+(clip.size/1024/1024).toFixed(2)+" MB";
+  info.append(name,meta);
+
+  const actions=document.createElement("div");
+  actions.className="clip-actions";
+  actions.append(
+   makeButton("▶","Preview this clip",()=>{playingAll=false;selectClip(clip.id,true);}),
+   makeButton("↑","Move up",()=>moveClip(clip.id,-1),i===0),
+   makeButton("↓","Move down",()=>moveClip(clip.id,1),i===clips.length-1),
+   makeButton("✕","Remove clip",()=>removeClip(clip.id),false,"danger")
+  );
+
+  li.append(info,actions);
+  clipList.appendChild(li);
+ });
+
+ if(!clips.length){
+  fileInfo.textContent="No video selected. You can choose several clips at once, or add more later.";
+  uploadLabel.textContent="Choose videos";
+ }else{
+  const totalMb=clips.reduce((s,c)=>s+c.size,0)/1024/1024;
+  const dur=totalDuration();
+  fileInfo.textContent=
+   clips.length+(clips.length===1?" clip":" clips")+
+   " · "+(dur===null?"length loading":fmtTime(dur))+
+   " · "+totalMb.toFixed(2)+" MB";
+  uploadLabel.textContent="Add more videos";
+ }
+
+ playAllBtn.hidden=clips.length<2;
+ clearAllBtn.hidden=clips.length<1;
+ playAllBtn.textContent=playingAll?"Stop playing all":"Play all in order";
+
+ const si=indexOfClip(selectedId);
+ if(si>=0){
+  nowPlaying.hidden=false;
+  nowPlaying.textContent="Previewing clip "+(si+1)+" of "+clips.length+": "+clips[si].name;
+ }else{
+  nowPlaying.hidden=true;
+ }
+}
 
 videoFile.addEventListener("change",()=>{
- const file=videoFile.files[0];
- if(!file)return;
- if(currentUrl)URL.revokeObjectURL(currentUrl);
- currentUrl=URL.createObjectURL(file);
- preview.src=currentUrl;
- preview.hidden=false;
- document.getElementById("fileInfo").textContent=
- file.name+" · "+(file.size/1024/1024).toFixed(2)+" MB";
+ addFiles(videoFile.files);
+ // Reset so the same clip can be picked again and Safari fires change every time
+ videoFile.value="";
 });
 
+playAllBtn.addEventListener("click",()=>{
+ if(playingAll){
+  playingAll=false;
+  preview.pause();
+  render();
+  return;
+ }
+ if(!clips.length)return;
+ playingAll=true;
+ selectClip(clips[0].id,true);
+});
+
+clearAllBtn.addEventListener("click",clearAll);
+
+preview.addEventListener("ended",()=>{
+ if(!playingAll)return;
+ const i=indexOfClip(selectedId);
+ if(i>=0&&i<clips.length-1){
+  selectClip(clips[i+1].id,true);
+ }else{
+  playingAll=false;
+  render();
+ }
+});
+
+/* ---------- AI Director ---------- */
 document.getElementById("generate").addEventListener("click",()=>{
  const description=document.getElementById("description").value.trim();
  const format=document.getElementById("format").value;
@@ -166,6 +413,13 @@ document.getElementById("generate").addEventListener("click",()=>{
   return;
  }
 
+ const dur=totalDuration();
+ const clipSummary=clips.length
+  ? clips.length+(clips.length===1?" clip":" clips")+
+    " ("+clips.map(c=>c.name).join(" → ")+")"+
+    (dur===null?"":", total "+fmtTime(dur))
+  : "no clips uploaded yet";
+
  result.innerHTML="";
  const title=document.createElement("strong");
  title.textContent="YOUR EDITING CONCEPT";
@@ -173,6 +427,7 @@ document.getElementById("generate").addEventListener("click",()=>{
  details.textContent=
  "Style: "+selectedStyle+
  " | Format: "+format+
+ " | Footage: "+clipSummary+
  " | Creative brief: "+description;
  const note=document.createElement("p");
  note.className="small";
@@ -180,6 +435,8 @@ document.getElementById("generate").addEventListener("click",()=>{
  "Concept prepared locally. AI analysis and video rendering are not connected yet.";
  result.append(title,details,note);
 });
+
+render();
 </script>
 </body>
 </html>

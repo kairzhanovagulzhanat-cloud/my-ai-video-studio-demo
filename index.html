@@ -1,0 +1,185 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MY AI VIDEO STUDIO</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#101010;color:#f5f0e8;
+ font-family:Arial,sans-serif
+}
+header{
+ padding:20px 5%;border-bottom:1px solid #333;
+ display:flex;justify-content:space-between;align-items:center
+}
+.logo{letter-spacing:2px;font-size:17px;font-weight:bold}
+.gold{color:#c9a879}
+main{max-width:1100px;margin:auto;padding:30px 5%}
+h1{font-size:36px;font-weight:400;margin-bottom:8px}
+h2{font-size:18px;font-weight:500}
+p{color:#aaa;line-height:1.6}
+.card{
+ background:#1b1b1b;border:1px solid #363636;
+ border-radius:12px;padding:20px;margin:18px 0
+}
+.grid{
+ display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
+ gap:12px
+}
+.style{
+ background:#252525;border:1px solid #444;
+ border-radius:9px;padding:16px;color:white;
+ cursor:pointer;text-align:left
+}
+.style.active{border-color:#c9a879;background:#30291f}
+button,.upload{
+ background:#c9a879;color:#15110b;
+ border:0;border-radius:7px;padding:13px 18px;
+ font-weight:bold;cursor:pointer
+}
+input,select,textarea{
+ width:100%;background:#292929;color:white;
+ border:1px solid #444;border-radius:7px;
+ padding:13px;margin:8px 0 15px;font-size:15px
+}
+textarea{min-height:90px;resize:vertical}
+input[type=file]{display:none}
+.upload{display:inline-block}
+video{width:100%;max-height:420px;margin-top:15px;border-radius:9px}
+.small{font-size:12px;color:#999}
+.result{background:#242424;padding:16px;border-radius:9px}
+footer{text-align:center;padding:30px;color:#777;font-size:12px}
+@media(max-width:600px){
+ h1{font-size:29px}
+ header{padding:17px}
+ main{padding:22px 16px}
+}
+</style>
+</head>
+<body>
+
+<header>
+ <div class="logo">MY AI VIDEO <span class="gold">STUDIO</span></div>
+ <div class="gold small">CREATIVE DEMO</div>
+</header>
+
+<main>
+ <p class="gold">YOUR PERSONAL CREATIVE SPACE</p>
+ <h1>Create something <span class="gold">beautiful.</span></h1>
+ <p>A personal video editing studio for Instagram, TikTok and YouTube.</p>
+
+ <section class="card">
+  <h2>01 — Upload your footage</h2>
+  <label class="upload" for="videoFile">Choose video</label>
+  <input id="videoFile" type="file" accept="video/*">
+  <p id="fileInfo" class="small">No video selected.</p>
+  <video id="preview" controls hidden></video>
+ </section>
+
+ <section class="card">
+  <h2>02 — Choose your creative style</h2>
+  <div class="grid">
+   <button class="style active" data-style="Luxury Editorial">✦<br><br>Luxury Editorial</button>
+   <button class="style" data-style="Cinematic">◈<br><br>Cinematic</button>
+   <button class="style" data-style="Minimalist">○<br><br>Minimalist</button>
+   <button class="style" data-style="Trendy Social">✧<br><br>Trendy Social</button>
+   <button class="style" data-style="Beauty Aesthetic">♡<br><br>Beauty Aesthetic</button>
+   <button class="style" data-style="Mixed Style">✺<br><br>Mixed Style</button>
+  </div>
+ </section>
+
+ <section class="card">
+  <h2>03 — Video format</h2>
+  <select id="format">
+   <option>9:16 — Instagram Reels / TikTok / Shorts</option>
+   <option>16:9 — YouTube</option>
+   <option>1:1 — Square video</option>
+  </select>
+ </section>
+
+ <section class="card">
+  <h2>04 — AI Director</h2>
+  <p>Describe the video you want to create.</p>
+  <textarea id="description" placeholder="Create an elegant video with beautiful typography, smooth transitions and cinematic sound..."></textarea>
+  <button id="generate">Prepare editing concept</button>
+ </section>
+
+ <section class="card">
+  <h2>05 — Editing concept</h2>
+  <div id="result" class="result">
+   <p>Your editing concept will appear here.</p>
+  </div>
+ </section>
+
+ <section class="card">
+  <h2>06 — Creative modules</h2>
+  <div class="grid">
+   <div class="style">Typography<br><br><span class="small">Font library</span></div>
+   <div class="style">Sound Design<br><br><span class="small">Audio library</span></div>
+   <div class="style">Motion Effects<br><br><span class="small">Animations</span></div>
+   <div class="style">Color Studio<br><br><span class="small">Color presets</span></div>
+   <div class="style">My Brand Styles<br><br><span class="small">Saved styles</span></div>
+   <div class="style">Export Studio<br><br><span class="small">Video export</span></div>
+  </div>
+ </section>
+ <p class="small">Demonstration version. AI editing and cloud rendering are not connected yet.</p>
+</main>
+
+<footer>MY AI VIDEO STUDIO · PERSONAL CREATIVE PROJECT</footer>
+
+<script>
+let selectedStyle="Luxury Editorial";
+
+document.querySelectorAll("[data-style]").forEach(button=>{
+ button.addEventListener("click",()=>{
+  document.querySelectorAll("[data-style]").forEach(b=>b.classList.remove("active"));
+  button.classList.add("active");
+  selectedStyle=button.dataset.style;
+ });
+});
+
+const videoFile=document.getElementById("videoFile");
+const preview=document.getElementById("preview");
+let currentUrl=null;
+
+videoFile.addEventListener("change",()=>{
+ const file=videoFile.files[0];
+ if(!file)return;
+ if(currentUrl)URL.revokeObjectURL(currentUrl);
+ currentUrl=URL.createObjectURL(file);
+ preview.src=currentUrl;
+ preview.hidden=false;
+ document.getElementById("fileInfo").textContent=
+ file.name+" · "+(file.size/1024/1024).toFixed(2)+" MB";
+});
+
+document.getElementById("generate").addEventListener("click",()=>{
+ const description=document.getElementById("description").value.trim();
+ const format=document.getElementById("format").value;
+ const result=document.getElementById("result");
+
+ if(!description){
+  result.textContent="Please describe your video first.";
+  return;
+ }
+
+ result.innerHTML="";
+ const title=document.createElement("strong");
+ title.textContent="YOUR EDITING CONCEPT";
+ const details=document.createElement("p");
+ details.textContent=
+ "Style: "+selectedStyle+
+ " | Format: "+format+
+ " | Creative brief: "+description;
+ const note=document.createElement("p");
+ note.className="small";
+ note.textContent=
+ "Concept prepared locally. AI analysis and video rendering are not connected yet.";
+ result.append(title,details,note);
+});
+</script>
+</body>
+</html>

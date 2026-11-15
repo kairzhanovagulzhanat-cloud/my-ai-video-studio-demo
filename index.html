@@ -78,6 +78,30 @@ footer{text-align:center;padding:30px;color:#777;font-size:12px}
 .mini.danger{color:#e49a9a}
 .nowplaying{margin-top:12px}
 
+
+/* Creative modules */
+label{display:block;font-size:14px;color:#ccc}
+label.chk{display:flex;align-items:center;margin:6px 0 12px}
+input[type=checkbox]{width:auto;margin:0 10px 0 0;transform:scale(1.3)}
+input[type=range]{padding:0;border:0;background:none}
+input[type=color]{height:46px;padding:4px}
+h3{font-size:16px;font-weight:500;margin:20px 0 6px;color:#c9a879}
+.panel{margin-top:14px;padding:16px;background:#222;border:1px solid #363636;border-radius:9px}
+.panel>h3:first-child{margin-top:0}
+.mods{margin-top:15px}
+.keys{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+.stage{position:relative;overflow:hidden;border-radius:9px;margin-top:15px;background:#000}
+.stage video{margin-top:0;display:block;border-radius:0}
+.demo{height:150px}
+.demo .media{position:absolute;inset:0;background:linear-gradient(120deg,#d9534f,#e8b84a 30%,#4caf7d 55%,#3a78c2 80%,#7b4bb3)}
+.sub{position:absolute;left:5%;right:5%;pointer-events:none;line-height:1.35}
+.sub span{padding:3px 10px;border-radius:6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+@keyframes zin{from{transform:scale(1)}to{transform:scale(1.18)}}
+@keyframes zout{from{transform:scale(1.18)}to{transform:scale(1)}}
+@keyframes pan{from{transform:scale(1.15) translateX(-4%)}to{transform:scale(1.15) translateX(4%)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+
 @media(max-width:600px){
  h1{font-size:29px}
  header{padding:17px}
@@ -108,7 +132,7 @@ footer{text-align:center;padding:30px;color:#777;font-size:12px}
   <p id="fileInfo" class="small">No video selected. You can choose several clips at once, or add more later.</p>
   <ul id="clipList" class="clips"></ul>
   <p id="nowPlaying" class="small nowplaying" hidden></p>
-  <video id="preview" controls playsinline hidden></video>
+  <div class="stage" id="stage"><video id="preview" controls playsinline hidden></video><div class="sub" id="sub" hidden><span></span></div></div>
  </section>
 
  <section class="card">
@@ -148,14 +172,17 @@ footer{text-align:center;padding:30px;color:#777;font-size:12px}
 
  <section class="card">
   <h2>06 — Creative modules</h2>
-  <div class="grid">
-   <div class="style">Typography<br><br><span class="small">Font library</span></div>
-   <div class="style">Sound Design<br><br><span class="small">Audio library</span></div>
-   <div class="style">Motion Effects<br><br><span class="small">Animations</span></div>
-   <div class="style">Color Studio<br><br><span class="small">Color presets</span></div>
-   <div class="style">My Brand Styles<br><br><span class="small">Saved styles</span></div>
-   <div class="style">Export Studio<br><br><span class="small">Video export</span></div>
+  <p>Tap a module to open its settings. Changes show in the sample below and in your clip preview in step 01.</p>
+  <div class="stage demo"><div class="media" id="demoMedia"></div><div class="sub" id="demoSub"><span></span></div></div>
+  <div class="grid mods">
+   <button type="button" class="style" data-panel="typo" aria-expanded="false">Typography<br><br><span class="small">Fonts and subtitles</span></button>
+   <button type="button" class="style" data-panel="sound" aria-expanded="false">Sound Design<br><br><span class="small">Music and speed</span></button>
+   <button type="button" class="style" data-panel="motion" aria-expanded="false">Motion Effects<br><br><span class="small">Preview animations</span></button>
+   <button type="button" class="style" data-panel="color" aria-expanded="false">Color Studio<br><br><span class="small">Color adjustments</span></button>
+   <button type="button" class="style" data-panel="brand" aria-expanded="false">My Brand Styles<br><br><span class="small">Saved looks</span></button>
+   <button type="button" class="style" data-panel="export" aria-expanded="false">Export Studio<br><br><span class="small">Downloads</span></button>
   </div>
+  <div id="panels"></div>
  </section>
  <p class="small">Demonstration version. AI editing and cloud rendering are not connected yet.</p>
 </main>
@@ -369,6 +396,7 @@ function render(){
  }else{
   nowPlaying.hidden=true;
  }
+ if(typeof updateSub==="function")updateSub();
 }
 
 videoFile.addEventListener("change",()=>{
@@ -435,6 +463,311 @@ document.getElementById("generate").addEventListener("click",()=>{
  "Concept prepared locally. AI analysis and video rendering are not connected yet.";
  result.append(title,details,note);
 });
+
+/* ---------- Creative modules ---------- */
+const $=id=>document.getElementById(id);
+const DEF={font:"Arial",size:26,weight:"700",color:"#ffffff",align:"center",pos:"bottom",box:1,lang:"kk",lineSec:3,subOn:1,
+ motion:"none",mdur:6,br:100,ct:100,sat:100,hue:0,gs:0,sp:0,muted:0,speed:1,vol:100,music:1,mvol:50,loop:1};
+let S=Object.assign({},DEF);
+const volOK=(()=>{const a=new Audio();a.volume=0.5;return a.volume===0.5})();
+const RM=!!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);
+const music=new Audio();let mUrl=null;
+const lines=()=>$("subText").value.split("\n").map(t=>t.trim()).filter(Boolean);
+
+const sel=(k,l,o)=>`<label>${l}<select data-k="${k}">${o.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join("")}</select></label>`;
+const rg=(k,l,a,b,st)=>`<label>${l}: <b data-v="${k}"></b><input type="range" data-k="${k}" min="${a}" max="${b}" step="${st||1}"></label>`;
+const ck=(k,l)=>`<label class="chk"><input type="checkbox" data-k="${k}">${l}</label>`;
+
+const PRE={"Original":{},"Warm":{br:105,ct:105,sat:110,sp:35},"Cool":{hue:-15,ct:105,sat:95},"Cinematic":{br:92,ct:125,sat:85,sp:15},"Black and white":{gs:100,ct:115},"Vivid":{ct:110,sat:160},"Faded":{br:110,ct:85,sat:80}};
+const COLORKEYS=["br","ct","sat","hue","gs","sp"];
+
+const PANEL={
+typo:"<h3>Typography</h3>"+
+ sel("font","Font",[["Arial","Arial"],["Verdana","Verdana"],["Trebuchet MS","Trebuchet MS"],["Times New Roman","Times New Roman"],["Georgia","Georgia"],["Courier New","Courier New"],["system-ui","System font"]])+
+ rg("size","Text size (px)",14,60)+
+ sel("weight","Weight",[["400","Regular"],["700","Bold"]])+
+ `<label>Text color<input type="color" data-k="color"></label>`+
+ sel("align","Alignment",[["left","Left"],["center","Center"],["right","Right"]])+
+ sel("pos","Position",[["bottom","Bottom"],["middle","Middle"],["top","Top"]])+
+ ck("box","Dark box behind text")+
+ "<h3>Subtitles</h3>"+
+ sel("lang","Language",[["kk","Kazakh"],["ru","Russian"],["en","English"]])+
+ ck("subOn","Show subtitles in the clip preview")+
+ `<label>Subtitle text (one subtitle per line)<textarea id="subText" lang="kk" placeholder="Сәлем! Қош келдіңіз"></textarea></label>`+
+ `<p class="small">Kazakh letters. Tap one to add it where your cursor is:</p><div class="keys" id="keys"></div>`+
+ `<div class="actions"><button type="button" class="ghost" id="shiftKey">Capital letters</button><button type="button" class="ghost" id="sampleSub">Insert sample</button></div>`+
+ rg("lineSec","Seconds per subtitle",1,10)+
+ `<p class="small">Each line is shown for the chosen time, in order, starting at the first clip. Lines are not matched to speech.</p>`,
+sound:"<h3>Sound design</h3>"+
+ ck("muted","Mute video sound")+
+ rg("vol","Video volume",0,100)+
+ sel("speed","Playback speed",[[0.5,"0.5×"],[0.75,"0.75×"],[1,"1× normal"],[1.25,"1.25×"],[1.5,"1.5×"],[2,"2×"]])+
+ `<p class="small" id="volNote"></p>`+
+ `<p>Background music from your device</p><div class="actions"><label class="upload" for="musicFile">Choose music</label><button type="button" class="ghost" id="musicClear">Remove music</button></div><input id="musicFile" type="file" accept="audio/*"><p class="small" id="musicInfo">No music selected.</p>`+
+ ck("music","Play music with the video")+ck("loop","Loop music")+rg("mvol","Music volume",0,100)+
+ `<p class="small">Music plays together with the video in this preview only. It is not mixed into any downloaded file.</p>`,
+motion:"<h3>Motion effects</h3>"+
+ sel("motion","Effect",[["none","None"],["zin","Slow zoom in"],["zout","Slow zoom out"],["pan","Slow pan"],["pulse","Gentle pulse"],["fade","Fade in"]])+
+ rg("mdur","Duration (seconds)",1,20)+
+ `<button type="button" id="replay">Replay effect</button>`+
+ `<p class="small">Effects are shown in the preview only and are not rendered into a video file. While an effect is on, the player controls are hidden: tap the video to play or pause.</p>`,
+color:"<h3>Color studio</h3><div class=\"grid\" id=\"presets\"></div>"+
+ rg("br","Brightness",50,150)+rg("ct","Contrast",50,150)+rg("sat","Saturation",0,200)+rg("hue","Hue shift (degrees)",-180,180)+rg("gs","Black and white",0,100)+rg("sp","Warm tone",0,100)+
+ `<button type="button" class="ghost" id="colorReset">Reset colors</button>`+
+ `<p class="small">Colors are applied to the preview only.</p>`,
+brand:"<h3>My brand styles</h3><p class=\"small\">Saves your typography, subtitle look, motion, color and sound settings, plus the creative style from step 02, in this browser on this device.</p>"+
+ `<label>Style name<input id="brandName" maxlength="40" placeholder="My soft gold look"></label>`+
+ `<div class="actions"><button type="button" id="brandSave">Save current look</button><button type="button" class="ghost" id="brandReset">Reset to default look</button></div>`+
+ `<p class="small" id="brandMsg"></p><ul class="clips" id="brandList"></ul>`,
+export:"<h3>Export studio</h3><div class=\"result\" id=\"expSum\"></div>"+
+ `<p></p><div class="actions"><button type="button" id="exTxt">Download concept (.txt)</button><button type="button" id="exJson">Download project (.json)</button></div>`+
+ `<p></p><div class="actions"><button type="button" id="exSrt">Download subtitles (.srt)</button><button type="button" id="exVtt">Download subtitles (.vtt)</button></div>`+
+ `<p class="small" id="expMsg"></p>`+
+ "<h3>Video rendering</h3><p>MP4 rendering is not available in this version. Your clips, effects, colors and music are not combined into a new video file. Use the downloads above with a video editor app such as iMovie.</p>"+
+ `<button type="button" disabled>Render MP4 (not available)</button>`
+};
+
+const P=$("panels");
+Object.keys(PANEL).forEach(id=>{
+ const sct=document.createElement("section");
+ sct.className="panel";sct.id="p-"+id;sct.hidden=true;sct.innerHTML=PANEL[id];
+ P.appendChild(sct);
+});
+$("presets").innerHTML=Object.keys(PRE).map(n=>`<button type="button" class="style" data-pre="${n}">${n}</button>`).join("");
+
+document.querySelectorAll("[data-panel]").forEach(b=>b.addEventListener("click",()=>{
+ const id=b.dataset.panel,wasOpen=!$("p-"+id).hidden;
+ document.querySelectorAll(".panel").forEach(x=>x.hidden=true);
+ document.querySelectorAll("[data-panel]").forEach(x=>{x.classList.remove("active");x.setAttribute("aria-expanded","false")});
+ if(wasOpen)return;
+ $("p-"+id).hidden=false;
+ b.classList.add("active");b.setAttribute("aria-expanded","true");
+ if(id==="export")drawExp();
+ if(id==="brand")drawBrands();
+ $("p-"+id).scrollIntoView({behavior:"smooth",block:"nearest"});
+}));
+
+function syncUI(){
+ document.querySelectorAll("[data-k]").forEach(el=>{
+  const v=S[el.dataset.k];
+  if(el.type==="checkbox")el.checked=!!v;else el.value=v;
+ });
+ paint();
+}
+
+function onSetting(e){
+ const el=e.target,k=el.dataset&&el.dataset.k;
+ if(!k)return;
+ S[k]=el.type==="checkbox"?(el.checked?1:0):(typeof DEF[k]==="number"?+el.value:el.value);
+ paint();
+ if(k==="motion"||k==="mdur")runMotion();
+}
+P.addEventListener("input",onSetting);
+P.addEventListener("change",onSetting);
+
+P.addEventListener("click",e=>{
+ const pre=e.target.closest("[data-pre]");
+ if(pre){
+  COLORKEYS.forEach(k=>S[k]=DEF[k]);
+  Object.assign(S,PRE[pre.dataset.pre]);
+  syncUI();
+ }
+});
+$("colorReset").addEventListener("click",()=>{COLORKEYS.forEach(k=>S[k]=DEF[k]);syncUI()});
+$("replay").addEventListener("click",()=>runMotion(true));
+
+/* Subtitles */
+let caps=false;
+function drawKeys(){
+ $("keys").innerHTML=[..."әғқңөұүһі"].map(c=>{
+  const x=caps?c.toUpperCase():c;
+  return `<button type="button" class="mini" data-ch="${x}">${x}</button>`;
+ }).join("");
+}
+drawKeys();
+$("keys").addEventListener("click",e=>{
+ const b=e.target.closest("[data-ch]");
+ if(!b)return;
+ const t=$("subText");
+ t.setRangeText(b.dataset.ch,t.selectionStart,t.selectionEnd,"end");
+ t.focus();
+ t.dispatchEvent(new Event("input"));
+});
+$("shiftKey").addEventListener("click",()=>{
+ caps=!caps;
+ $("shiftKey").textContent=caps?"Small letters":"Capital letters";
+ drawKeys();
+});
+$("sampleSub").addEventListener("click",()=>{
+ $("subText").value="Сәлем! Қош келдіңіз\nКөркем бейне жасаңыз\nҰлы даланың үні";
+ paint();
+});
+$("subText").addEventListener("input",paint);
+
+function updateSub(){
+ const L=lines(),sub=$("sub");
+ let txt="";
+ if(S.subOn&&L.length&&selectedId!==null){
+  let off=0;
+  for(const c of clips){if(c.id===selectedId)break;off+=c.duration>0?c.duration:0}
+  txt=L[Math.floor((off+preview.currentTime)/S.lineSec)]||"";
+ }
+ sub.firstChild.textContent=txt;
+ sub.hidden=!txt;
+}
+["timeupdate","seeked","loadedmetadata"].forEach(ev=>preview.addEventListener(ev,()=>{
+ preview.playbackRate=S.speed;
+ updateSub();
+}));
+
+/* Motion */
+function runMotion(force){
+ [preview,$("demoMedia")].forEach(m=>{
+  m.style.animation="none";
+  void m.offsetWidth;
+  if(S.motion==="none"||(RM&&!force))return;
+  const loop=S.motion==="pulse"||S.motion==="pan";
+  m.style.animation=S.motion+" "+S.mdur+"s ease-in-out "+(loop?"infinite alternate":"1")+" both";
+ });
+}
+$("stage").addEventListener("click",()=>{
+ if(preview.hidden||preview.controls)return;
+ if(preview.paused){const p=preview.play();if(p&&p.catch)p.catch(()=>{})}else preview.pause();
+});
+
+/* Sound */
+$("volNote").textContent=volOK?"":"iPad Safari does not let web pages change volume. Use the device volume buttons.";
+if(!volOK)document.querySelectorAll('[data-k="vol"],[data-k="mvol"]').forEach(x=>x.disabled=true);
+$("musicFile").addEventListener("change",e=>{
+ const f=e.target.files[0];
+ if(!f)return;
+ if(mUrl)URL.revokeObjectURL(mUrl);
+ mUrl=URL.createObjectURL(f);
+ music.src=mUrl;
+ $("musicInfo").textContent=f.name+" · "+(f.size/1048576).toFixed(2)+" MB";
+ e.target.value="";
+});
+$("musicClear").addEventListener("click",()=>{
+ music.pause();music.removeAttribute("src");music.load();
+ if(mUrl)URL.revokeObjectURL(mUrl);
+ mUrl=null;
+ $("musicInfo").textContent="No music selected.";
+});
+preview.addEventListener("play",()=>{
+ if(mUrl&&S.music){const p=music.play();if(p&&p.catch)p.catch(()=>{})}
+});
+preview.addEventListener("pause",()=>music.pause());
+
+/* Paint all settings */
+function paint(){
+ const f="brightness("+S.br+"%) contrast("+S.ct+"%) saturate("+S.sat+"%) hue-rotate("+S.hue+"deg) grayscale("+S.gs+"%) sepia("+S.sp+"%)";
+ [preview,$("demoMedia")].forEach(m=>m.style.filter=f);
+ [$("sub"),$("demoSub")].forEach(el=>{
+  const st=el.style;
+  el.lang=S.lang;
+  st.fontFamily=S.font==="system-ui"?"system-ui,sans-serif":'"'+S.font+'",Arial,sans-serif';
+  st.fontSize=S.size+"px";st.fontWeight=S.weight;st.color=S.color;st.textAlign=S.align;
+  st.top=S.pos==="top"?"10%":S.pos==="middle"?"50%":"auto";
+  st.bottom=S.pos==="bottom"?"14%":"auto";
+  st.transform=S.pos==="middle"?"translateY(-50%)":"none";
+  el.firstChild.style.background=S.box?"rgba(0,0,0,.6)":"none";
+ });
+ $("demoSub").firstChild.textContent=lines()[0]||"Қош келдіңіз · Welcome";
+ document.querySelectorAll("[data-v]").forEach(e=>e.textContent=S[e.dataset.v]);
+ preview.controls=S.motion==="none";
+ preview.muted=!!S.muted;
+ preview.defaultPlaybackRate=preview.playbackRate=S.speed;
+ music.muted=!S.music;music.loop=!!S.loop;
+ if(volOK){preview.volume=S.vol/100;music.volume=S.mvol/100}
+ updateSub();
+}
+
+/* Brand styles (saved in this browser) */
+const KEY="aivs.brands";
+function brands(){try{return JSON.parse(localStorage.getItem(KEY))||[]}catch(e){return[]}}
+function saveBrands(a){try{localStorage.setItem(KEY,JSON.stringify(a));return true}catch(e){return false}}
+function applyBrand(i){
+ const b=brands()[i];
+ if(!b)return;
+ S=Object.assign({},DEF,b.s);
+ syncUI();runMotion();
+ const x=document.querySelector('[data-style="'+b.style+'"]');
+ if(x)x.click();
+ $("brandMsg").textContent="Applied: "+b.name;
+}
+function drawBrands(){
+ const L=$("brandList");
+ L.innerHTML="";
+ brands().forEach((b,i)=>{
+  const li=document.createElement("li");li.className="clip";
+  const n=document.createElement("div");n.className="clip-info clip-name";n.textContent=b.name+" · "+b.style;
+  const w=document.createElement("div");w.className="clip-actions";
+  w.append(
+   makeButton("Apply","Apply "+b.name,()=>applyBrand(i)),
+   makeButton("✕","Delete "+b.name,()=>{const a=brands();a.splice(i,1);saveBrands(a);drawBrands()},false,"danger")
+  );
+  li.append(n,w);L.appendChild(li);
+ });
+}
+$("brandSave").addEventListener("click",()=>{
+ const name=$("brandName").value.trim(),msg=$("brandMsg");
+ if(!name){msg.textContent="Enter a style name first.";return}
+ const a=brands();
+ a.push({name:name,style:selectedStyle,s:Object.assign({},S)});
+ if(!saveBrands(a.slice(-20))){msg.textContent="This browser mode does not allow saving.";return}
+ $("brandName").value="";
+ msg.textContent="Saved: "+name;
+ drawBrands();
+});
+$("brandReset").addEventListener("click",()=>{S=Object.assign({},DEF);syncUI();runMotion();$("brandMsg").textContent="Default look restored."});
+
+/* Export studio */
+const z=(n,l)=>String(n).padStart(l||2,"0");
+function ts(sec,v){
+ const m=Math.round(sec*1000);
+ return z(Math.floor(m/3600000))+":"+z(Math.floor(m/60000)%60)+":"+z(Math.floor(m/1000)%60)+(v?".":",")+z(m%1000,3);
+}
+function subsText(v){
+ return (v?"WEBVTT\n\n":"")+lines().map((t,i)=>(v?"":(i+1)+"\n")+ts(i*S.lineSec,v)+" --> "+ts((i+1)*S.lineSec,v)+"\n"+t+"\n").join("\n");
+}
+function conceptText(){
+ return ["MY AI VIDEO STUDIO - editing concept",
+  "Style: "+selectedStyle,
+  "Format: "+$("format").value,
+  "Brief: "+($("description").value.trim()||"(none)"),
+  "Clips in order: "+(clips.map((c,i)=>(i+1)+". "+c.name+" ("+fmtTime(c.duration)+")").join("; ")||"none"),
+  "Typography: "+S.font+", "+S.size+"px, "+S.color+", "+S.pos,
+  "Subtitle lines: "+lines().length+" ("+S.lang+"), "+S.lineSec+" s each",
+  "Color: brightness "+S.br+"%, contrast "+S.ct+"%, saturation "+S.sat+"%",
+  "Motion: "+S.motion,
+  "",
+  "Prepared in the browser. No AI analysis or video rendering was performed."].join("\n");
+}
+function dl(name,text,type,bom){
+ const b=new Blob([(bom?"\ufeff":"")+text],{type:type+";charset=utf-8"});
+ const u=URL.createObjectURL(b),a=document.createElement("a");
+ a.href=u;a.download=name;
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(u),5000);
+}
+function drawExp(){
+ $("expSum").textContent=clips.length+" clip(s), total "+fmtTime(totalDuration())+" · style: "+selectedStyle+" · format: "+$("format").value.split(" — ")[0]+" · "+lines().length+" subtitle line(s)";
+ $("expMsg").textContent="";
+}
+$("exTxt").addEventListener("click",()=>dl("editing-concept.txt",conceptText(),"text/plain",true));
+$("exJson").addEventListener("click",()=>dl("video-studio-project.json",JSON.stringify({
+ app:"MY AI VIDEO STUDIO",style:selectedStyle,format:$("format").value,brief:$("description").value.trim(),
+ clips:clips.map(c=>({name:c.name,size:c.size,duration:c.duration})),look:S,subtitles:lines(),
+ note:"Settings only. Video files are not included."},null,1),"application/json",false));
+[["exSrt",0,"subtitles.srt","application/x-subrip"],["exVtt",1,"subtitles.vtt","text/vtt"]].forEach(a=>{
+ $(a[0]).addEventListener("click",()=>{
+  if(!lines().length){$("expMsg").textContent="Add subtitle text in Typography first.";return}
+  $("expMsg").textContent="";
+  dl(a[2],subsText(a[1]),a[3],true);
+ });
+});
+
+syncUI();
 
 render();
 </script>
